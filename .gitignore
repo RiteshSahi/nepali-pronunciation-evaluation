@@ -1,6 +1,10 @@
 minor_project/
-dataset/
+
+# Ignore only the large reference folder
+dataset/reference/
+
 models/
+
 __pycache__/
 *.pyc
 .DS_Store
