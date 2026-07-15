@@ -43,7 +43,7 @@ def transcribe_audio(file_path):
     return text
 
 
-voice_numbers = [
+voice_numbers= [
     71,
     76,
     80,
@@ -53,8 +53,14 @@ voice_numbers = [
     109,
     113,
     117,
+    118,
+    121,
     123,
-    141
+    137,
+    141,
+    149,
+    151,
+    167
 ]
 
 

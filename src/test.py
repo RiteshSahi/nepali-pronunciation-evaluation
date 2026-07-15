@@ -4,7 +4,7 @@ import os
 # ----------------------------------
 # Change only this
 # ----------------------------------
-MODE = "bad"      # "good" or "bad"
+MODE = "good"      # "good" or "bad"
 # ----------------------------------
 
 reference_folder = "../dataset/app_reference/"
@@ -19,6 +19,7 @@ voice_ids = [
     109,
     113,
     117,
+    118,
     121,
     123,
     137,

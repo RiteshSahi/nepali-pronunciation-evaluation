@@ -6,7 +6,8 @@ from jiwer import wer, cer
 # ----------------------------------
 # Change only this
 # ----------------------------------
-MODE = "bad"      # "good" or "bad"
+MODE = "good" \
+""      # "good" or "bad"
 # ----------------------------------
 
 
