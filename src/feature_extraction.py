@@ -1,44 +1,44 @@
+import os
 import numpy as np
 import librosa
 
 from preprocess import preprocess_audio
 
-
 N_MFCC = 13
 
 
 def extract_mfcc(audio, sample_rate, n_mfcc=N_MFCC):
+    """
+    Extract 39-dimensional MFCC features:
+    13 MFCC + 13 Delta + 13 Delta-Delta
+    """
 
-    # MFCC features
     mfcc = librosa.feature.mfcc(
         y=audio,
         sr=sample_rate,
         n_mfcc=n_mfcc
     )
 
-    # First order derivative
-    delta = librosa.feature.delta(
-        mfcc
-    )
+    delta = librosa.feature.delta(mfcc)
 
-    # Second order derivative
     delta2 = librosa.feature.delta(
         mfcc,
         order=2
     )
 
-    # Combine MFCC + Delta + Delta-Delta
-    combined = np.vstack([
+    features = np.vstack([
         mfcc,
         delta,
         delta2
     ])
 
-    return combined
-
+    return features
 
 
 def apply_cmvn(features):
+    """
+    Cepstral Mean and Variance Normalization
+    """
 
     mean = np.mean(
         features,
@@ -52,34 +52,29 @@ def apply_cmvn(features):
         keepdims=True
     )
 
-    # Avoid division by zero
     std[std == 0] = 1
 
-    normalized = (
-        features - mean
-    ) / std
-
-    return normalized
-
+    return (features - mean) / std
 
 
 def extract_features(file_path):
+    """
+    Complete feature extraction pipeline.
+    """
 
     # Apply noise reduction only for user recordings
-    use_noise_reduction = "user_recordings" in file_path
+    use_noise_reduction = "user_recordings" in file_path.lower()
 
     audio, sr = preprocess_audio(
         file_path,
         apply_noise_reduction=use_noise_reduction
     )
 
-    # Extract 39-dimensional MFCC features
     features = extract_mfcc(
         audio,
         sr
     )
 
-    # Apply CMVN
     features = apply_cmvn(
         features
     )
@@ -89,13 +84,23 @@ def extract_features(file_path):
 
 if __name__ == "__main__":
 
-    file_path = "../dataset/app_reference/Voice71.wav"
+    file_path = input(
+        "Enter audio path: "
+    ).strip()
 
-    features = extract_features(
-        file_path
-    )
+    if not os.path.exists(file_path):
+        print("Audio file not found.")
+        exit()
 
-    print("Feature Extraction Successful")
-    print(f"Feature Shape : {features.shape}")
-    print(f"Mean          : {np.mean(features):.4f}")
-    print(f"Std           : {np.std(features):.4f}")
+    features = extract_features(file_path)
+
+    print("\n" + "=" * 50)
+    print("Feature Extraction")
+    print("=" * 50)
+    print(f"File           : {file_path}")
+    print(f"Feature Shape  : {features.shape}")
+    print(f"Feature Dim    : {features.shape[0]}")
+    print(f"Frames         : {features.shape[1]}")
+    print(f"Mean           : {np.mean(features):.4f}")
+    print(f"Std            : {np.std(features):.4f}")
+    print("=" * 50)

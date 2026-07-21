@@ -6,52 +6,42 @@ from jiwer import wer, cer
 from dtw_distance import calculate_dtw_distance
 
 
-# -----------------------------
+# =====================================================
+# Select User
+# =====================================================
+
+USER = input(
+    "Enter user folder (user1/user2/user3): "
+).strip()
+
+
+# =====================================================
 # Paths
-# -----------------------------
+# =====================================================
 
 REFERENCE_FOLDER = "../dataset/app_reference/"
 
-GOOD_AUDIO_FOLDER = "../dataset/user_recordings/good_voice/"
-BAD_AUDIO_FOLDER = "../dataset/user_recordings/bad_voice/"
+GOOD_AUDIO_FOLDER = f"../dataset/user_recordings/{USER}/good_voice/"
+BAD_AUDIO_FOLDER = f"../dataset/user_recordings/{USER}/bad_voice/"
 
-GOOD_ASR_FOLDER = "../dataset/data/asr_output/good/"
-BAD_ASR_FOLDER = "../dataset/data/asr_output/bad/"
+GOOD_ASR_FOLDER = f"../dataset/data/asr_output/{USER}/good/"
+BAD_ASR_FOLDER = f"../dataset/data/asr_output/{USER}/bad/"
 
-OUTPUT_FILE = "../dataset/pronunciation_dataset.csv"
-
-
-# -----------------------------
-# Voice IDs
-# -----------------------------
-
-voice_ids = [
-    71,
-    76,
-    80,
-    83,
-    97,
-    102,
-    109,
-    113,
-    117,
-    123,
-    141
-]
+OUTPUT_FILE = f"../dataset/{USER}_pronunciation_dataset.csv"
 
 
-# -----------------------------
-# Load reference sentences
-# -----------------------------
+# =====================================================
+# Load Reference Sentences
+# =====================================================
 
-df = pd.read_csv(
+reference_df = pd.read_csv(
     "../dataset/app_reference/sentences.csv"
 )
 
 
-# -----------------------------
-# Text functions
-# -----------------------------
+# =====================================================
+# Text Functions
+# =====================================================
 
 def normalize_text(text):
 
@@ -72,21 +62,20 @@ def normalize_text(text):
     return text.strip()
 
 
-
-def read_text(file):
+def read_text(file_path):
 
     with open(
-        file,
+        file_path,
         "r",
         encoding="utf-8"
     ) as f:
+
         return f.read()
 
 
-
-# -----------------------------
-# Feature extraction
-# -----------------------------
+# =====================================================
+# Calculate WER and CER
+# =====================================================
 
 def get_text_scores(reference, recognized):
 
@@ -106,101 +95,83 @@ def get_text_scores(reference, recognized):
     return word_error, char_error
 
 
-
-# -----------------------------
-# Process recordings
-# -----------------------------
+# =====================================================
+# Dataset
+# =====================================================
 
 dataset = []
 
 
 def process_recordings(
-        mode,
+        label,
         audio_folder,
-        asr_folder,
-        prefix
+        asr_folder
 ):
 
-    print("\nProcessing", mode)
+    print("\nProcessing", label)
 
-    for vid in voice_ids:
+    if not os.path.exists(audio_folder):
+        print(audio_folder, "does not exist")
+        return
 
-        voice_id = f"Voice{vid}"
+    audio_files = sorted([
+        f for f in os.listdir(audio_folder)
+        if f.endswith(".wav")
+    ])
 
+    for filename in audio_files:
 
-        # Reference sentence
-        row = df[
-            df["audio_id"] == voice_id
+        number = "".join(filter(str.isdigit, filename))
+
+        voice_id = f"Voice{number}"
+
+        row = reference_df[
+            reference_df["audio_id"] == voice_id
         ]
 
         if row.empty:
-            print(
-                voice_id,
-                "Reference missing"
-            )
+            print(f"{voice_id} -> Reference Missing")
             continue
-
 
         reference = row.iloc[0]["sentence"]
 
-
-        # Audio file
-
         audio_file = os.path.join(
             audio_folder,
-            f"{prefix}{vid}.wav"
+            filename
         )
-
-
-        # ASR file
 
         text_file = os.path.join(
             asr_folder,
-            f"{prefix}{vid}.txt"
+            filename.replace(".wav", ".txt")
         )
 
-
-        if not os.path.exists(audio_file):
-
-            print(
-                voice_id,
-                "Audio missing"
-            )
-            continue
-
-
         if not os.path.exists(text_file):
-
-            print(
-                voice_id,
-                "ASR missing"
-            )
+            print(f"{voice_id} -> ASR Missing")
             continue
-
 
         # DTW
-
         _, dtw_score = calculate_dtw_distance(
-            REFERENCE_FOLDER + f"Voice{vid}.wav",
+            os.path.join(
+                REFERENCE_FOLDER,
+                f"{voice_id}.wav"
+            ),
             audio_file
         )
 
-
-        # WER CER
-
+        # Read ASR output
         recognized = read_text(
             text_file
         )
 
+        # WER and CER
         word_error, char_error = get_text_scores(
             reference,
             recognized
         )
 
-
         dataset.append({
 
-            "voice": vid,
+            "voice": int(number),
 
             "dtw": round(
                 dtw_score,
@@ -217,59 +188,55 @@ def process_recordings(
                 4
             ),
 
-            "label": mode
+            "label": label
 
         })
 
-
-        print(
-            voice_id,
-            "completed"
-        )
+        print(f"{voice_id} -> Completed")
 
 
-
-# -----------------------------
-# Run
-# -----------------------------
+# =====================================================
+# Process Good Recordings
+# =====================================================
 
 process_recordings(
     "Good",
     GOOD_AUDIO_FOLDER,
-    GOOD_ASR_FOLDER,
-    "user_Voice"
+    GOOD_ASR_FOLDER
 )
 
+
+# =====================================================
+# Process Bad Recordings
+# =====================================================
 
 process_recordings(
     "Bad",
     BAD_AUDIO_FOLDER,
-    BAD_ASR_FOLDER,
-    "user_badVoice"
+    BAD_ASR_FOLDER
 )
 
 
+# =====================================================
+# Save Dataset
+# =====================================================
 
-# -----------------------------
-# Save CSV
-# -----------------------------
+result = pd.DataFrame(dataset)
 
-result = pd.DataFrame(
-    dataset
-)
-
+result = result.sort_values(
+    by=["label", "voice"]
+).reset_index(drop=True)
 
 result.to_csv(
     OUTPUT_FILE,
     index=False
 )
 
-
-print("\n" + "="*50)
+print("\n" + "=" * 60)
 print("Dataset Created Successfully")
-print("="*50)
+print("=" * 60)
 
 print(result)
 
-print("\nSaved at:")
+print("\nSaved to:")
 print(OUTPUT_FILE)

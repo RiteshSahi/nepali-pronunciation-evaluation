@@ -3,10 +3,12 @@ import torch
 import librosa
 from transformers import AutoProcessor, AutoModelForCTC
 
-
 MODEL_NAME = "anish-shilpakar/wav2vec2-nepali"
 
-# Load model only once
+# ----------------------------------
+# Load Model
+# ----------------------------------
+
 processor = AutoProcessor.from_pretrained(MODEL_NAME)
 model = AutoModelForCTC.from_pretrained(MODEL_NAME)
 model.eval()
@@ -27,9 +29,7 @@ def transcribe_audio(file_path):
     )
 
     with torch.no_grad():
-        logits = model(
-            inputs.input_values
-        ).logits
+        logits = model(inputs.input_values).logits
 
     predicted_ids = torch.argmax(
         logits,
@@ -43,40 +43,42 @@ def transcribe_audio(file_path):
     return text
 
 
-voice_numbers= [
-    71,
-    76,
-    80,
-    83,
-    97,
-    102,
-    109,
-    113,
-    117,
-    118,
-    121,
-    123,
-    137,
-    141,
-    149,
-    151,
-    167
+# ----------------------------------
+# Voice IDs
+# ----------------------------------
+
+voice_numbers = [
+    64, 67, 71, 72, 76, 78,
+    80, 83, 84, 85, 92, 94,
+    95, 97, 102, 109, 113,
+    117, 118, 121, 123,
+    137, 141, 149, 151, 167
 ]
 
 
+# ----------------------------------
+# Select User
+# ----------------------------------
+
+user_name = input(
+    "Enter user folder (user1/user2/user3): "
+).strip()
+
+
 datasets = [
+
     {
         "name": "GOOD",
-        "input_folder": "../dataset/user_recordings/good_voice",
-        "output_folder": "../dataset/data/asr_output/good",
-        "prefix": "user_Voice"
+        "input_folder": f"../dataset/user_recordings/{user_name}/good_voice",
+        "output_folder": f"../dataset/data/asr_output/{user_name}/good"
     },
+
     {
         "name": "BAD",
-        "input_folder": "../dataset/user_recordings/bad_voice",
-        "output_folder": "../dataset/data/asr_output/bad",
-        "prefix": "user_badVoice"
+        "input_folder": f"../dataset/user_recordings/{user_name}/bad_voice",
+        "output_folder": f"../dataset/data/asr_output/{user_name}/bad"
     }
+
 ]
 
 
@@ -98,16 +100,17 @@ for data in datasets:
 
         audio_file = os.path.join(
             data["input_folder"],
-            f"{data['prefix']}{number}.wav"
+            f"Voice{number}.wav"
         )
 
         output_file = os.path.join(
             data["output_folder"],
-            f"{data['prefix']}{number}.txt"
+            f"Voice{number}.txt"
         )
 
         if not os.path.exists(audio_file):
-            print(f"Voice{number} -> Recording not found")
+
+            print(f"Voice{number} -> Not Found")
             continue
 
         try:
@@ -126,6 +129,7 @@ for data in datasets:
         except Exception as e:
 
             print(f"Voice{number} -> Error: {e}")
+
 
 print("\n" + "=" * 60)
 print("ASR Generation Completed")
