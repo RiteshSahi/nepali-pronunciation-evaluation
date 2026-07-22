@@ -7,6 +7,10 @@ from preprocess import preprocess_audio
 N_MFCC = 13
 
 
+# =====================================================
+# Extract MFCC Features
+# =====================================================
+
 def extract_mfcc(audio, sample_rate, n_mfcc=N_MFCC):
     """
     Extract 39-dimensional MFCC features:
@@ -19,7 +23,9 @@ def extract_mfcc(audio, sample_rate, n_mfcc=N_MFCC):
         n_mfcc=n_mfcc
     )
 
-    delta = librosa.feature.delta(mfcc)
+    delta = librosa.feature.delta(
+        mfcc
+    )
 
     delta2 = librosa.feature.delta(
         mfcc,
@@ -34,6 +40,10 @@ def extract_mfcc(audio, sample_rate, n_mfcc=N_MFCC):
 
     return features
 
+
+# =====================================================
+# CMVN Normalization
+# =====================================================
 
 def apply_cmvn(features):
     """
@@ -57,17 +67,23 @@ def apply_cmvn(features):
     return (features - mean) / std
 
 
+# =====================================================
+# Complete Feature Extraction Pipeline
+# =====================================================
+
 def extract_features(file_path):
     """
     Complete feature extraction pipeline.
+
+    Steps:
+    1. Preprocess audio
+    2. Extract MFCC
+    3. Extract Delta and Delta-Delta
+    4. Apply CMVN
     """
 
-    # Apply noise reduction only for user recordings
-    use_noise_reduction = "user_recordings" in file_path.lower()
-
     audio, sr = preprocess_audio(
-        file_path,
-        apply_noise_reduction=use_noise_reduction
+        file_path
     )
 
     features = extract_mfcc(
@@ -82,36 +98,25 @@ def extract_features(file_path):
     return features
 
 
-if __name__ == "__main__":
+# =====================================================
+# Get Audio Duration
+# =====================================================
 
-    file_path = input(
-        "Enter audio path: "
-    ).strip()
-
-    if not os.path.exists(file_path):
-        print("Audio file not found.")
-        exit()
-
-    features = extract_features(file_path)
-
-    print("\n" + "=" * 50)
-    print("Feature Extraction")
-    print("=" * 50)
-    print(f"File           : {file_path}")
-    print(f"Feature Shape  : {features.shape}")
-    print(f"Feature Dim    : {features.shape[0]}")
-    print(f"Frames         : {features.shape[1]}")
-    print(f"Mean           : {np.mean(features):.4f}")
-    print(f"Std            : {np.std(features):.4f}")
-    print("=" * 50)
 def get_duration(file_path):
 
     audio, sr = preprocess_audio(
-        file_path,
-        apply_noise_reduction=("user_recordings" in file_path.lower())
+        file_path
     )
 
-    return len(audio) / sr
+    duration = len(audio) / sr
+
+    return duration
+
+
+# =====================================================
+# Zero Crossing Rate
+# =====================================================
+
 def get_zcr(audio_path):
 
     y, sr = librosa.load(
@@ -124,3 +129,39 @@ def get_zcr(audio_path):
     )[0]
 
     return np.mean(zcr)
+
+
+# =====================================================
+# Test
+# =====================================================
+
+if __name__ == "__main__":
+
+    file_path = input(
+        "Enter audio path: "
+    ).strip()
+
+
+    if not os.path.exists(file_path):
+
+        print("Audio file not found.")
+        exit()
+
+
+    features = extract_features(
+        file_path
+    )
+
+
+    print("\n" + "=" * 50)
+    print("Feature Extraction")
+    print("=" * 50)
+
+    print(f"File           : {file_path}")
+    print(f"Feature Shape  : {features.shape}")
+    print(f"Feature Dim    : {features.shape[0]}")
+    print(f"Frames         : {features.shape[1]}")
+    print(f"Mean           : {np.mean(features):.4f}")
+    print(f"Std            : {np.std(features):.4f}")
+
+    print("=" * 50)

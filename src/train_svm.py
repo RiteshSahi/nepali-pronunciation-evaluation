@@ -17,14 +17,13 @@ from sklearn.metrics import (
 
 TRAIN_FILES = []
 
-for user in ["user1", "user2"]:
+for user in ["user2", "user3"]:
 
     file = f"../dataset/{user}_pronunciation_dataset.csv"
 
     if os.path.exists(file):
         TRAIN_FILES.append(file)
-
-TEST_FILE = "../dataset/user3_pronunciation_dataset.csv"
+TEST_FILE = "../dataset/user1_pronunciation_dataset.csv"
 
 # ======================================================
 # Check Training Files
