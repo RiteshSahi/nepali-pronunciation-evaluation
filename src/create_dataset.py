@@ -4,15 +4,17 @@ import pandas as pd
 
 from jiwer import wer, cer
 from dtw_distance import calculate_dtw_distance
+from feature_extraction import (
+    get_duration,
+    get_zcr
+)
 
 
 # =====================================================
 # Select User
 # =====================================================
 
-USER = input(
-    "Enter user folder (user1/user2/user3): "
-).strip()
+USER = input("Enter user folder (user1/user2/user3): ").strip()
 
 
 # =====================================================
@@ -31,7 +33,7 @@ OUTPUT_FILE = f"../dataset/{USER}_pronunciation_dataset.csv"
 
 
 # =====================================================
-# Load Reference Sentences
+# Load Sentences
 # =====================================================
 
 reference_df = pd.read_csv(
@@ -40,7 +42,7 @@ reference_df = pd.read_csv(
 
 
 # =====================================================
-# Text Functions
+# Text Processing
 # =====================================================
 
 def normalize_text(text):
@@ -74,7 +76,7 @@ def read_text(file_path):
 
 
 # =====================================================
-# Calculate WER and CER
+# WER CER
 # =====================================================
 
 def get_text_scores(reference, recognized):
@@ -82,17 +84,10 @@ def get_text_scores(reference, recognized):
     reference = normalize_text(reference)
     recognized = normalize_text(recognized)
 
-    word_error = wer(
-        reference,
-        recognized
+    return (
+        wer(reference, recognized),
+        cer(reference, recognized)
     )
-
-    char_error = cer(
-        reference,
-        recognized
-    )
-
-    return word_error, char_error
 
 
 # =====================================================
@@ -102,13 +97,9 @@ def get_text_scores(reference, recognized):
 dataset = []
 
 
-def process_recordings(
-        label,
-        audio_folder,
-        asr_folder
-):
+def process_recordings(label, audio_folder, asr_folder):
 
-    print("\nProcessing", label)
+    print(f"\nProcessing {label}")
 
     if not os.path.exists(audio_folder):
         print(audio_folder, "does not exist")
@@ -133,9 +124,14 @@ def process_recordings(
             print(f"{voice_id} -> Reference Missing")
             continue
 
-        reference = row.iloc[0]["sentence"]
+        reference_sentence = row.iloc[0]["sentence"]
 
-        audio_file = os.path.join(
+        reference_audio = os.path.join(
+            REFERENCE_FOLDER,
+            f"{voice_id}.wav"
+        )
+
+        user_audio = os.path.join(
             audio_folder,
             filename
         )
@@ -145,48 +141,81 @@ def process_recordings(
             filename.replace(".wav", ".txt")
         )
 
+        if not os.path.exists(reference_audio):
+            print(f"{voice_id} -> Reference Audio Missing")
+            continue
+
         if not os.path.exists(text_file):
             print(f"{voice_id} -> ASR Missing")
             continue
 
+        # -----------------------------
         # DTW
-        _, dtw_score = calculate_dtw_distance(
-            os.path.join(
-                REFERENCE_FOLDER,
-                f"{voice_id}.wav"
-            ),
-            audio_file
+        # -----------------------------
+
+        dtw_score = calculate_dtw_distance(
+            reference_audio,
+            user_audio
         )
 
-        # Read ASR output
+        # -----------------------------
+        # Duration
+        # -----------------------------
+
+        reference_duration = get_duration(
+            reference_audio
+        )
+
+        user_duration = get_duration(
+            user_audio
+        )
+
+        duration_diff = abs(
+            reference_duration -
+            user_duration
+        )
+        #ZCR
+        reference_zcr = get_zcr(
+            reference_audio
+        )
+
+        user_zcr = get_zcr(
+            user_audio
+        )
+
+        zcr_diff = abs(
+            reference_zcr - user_zcr
+        )
+        # -----------------------------
+        # ASR
+        # -----------------------------
+
         recognized = read_text(
             text_file
         )
 
-        # WER and CER
         word_error, char_error = get_text_scores(
-            reference,
+            reference_sentence,
             recognized
         )
+
+        # -----------------------------
+        # Save
+        # -----------------------------
 
         dataset.append({
 
             "voice": int(number),
 
-            "dtw": round(
-                dtw_score,
-                4
-            ),
+            "dtw": round(dtw_score, 4),
 
-            "wer": round(
-                word_error,
-                4
-            ),
+            "duration": round(duration_diff, 4),
+            
+            "zcr": round(zcr_diff, 4),
 
-            "cer": round(
-                char_error,
-                4
-            ),
+            "wer": round(word_error, 4),
+
+            "cer": round(char_error, 4),
 
             "label": label
 
@@ -196,7 +225,7 @@ def process_recordings(
 
 
 # =====================================================
-# Process Good Recordings
+# Process
 # =====================================================
 
 process_recordings(
@@ -204,11 +233,6 @@ process_recordings(
     GOOD_AUDIO_FOLDER,
     GOOD_ASR_FOLDER
 )
-
-
-# =====================================================
-# Process Bad Recordings
-# =====================================================
 
 process_recordings(
     "Bad",
@@ -220,6 +244,10 @@ process_recordings(
 # =====================================================
 # Save Dataset
 # =====================================================
+
+if len(dataset) == 0:
+    print("No recordings found.")
+    exit()
 
 result = pd.DataFrame(dataset)
 

@@ -1,48 +1,55 @@
 import os
 import librosa
 import numpy as np
-import noisereduce as nr
+import soundfile as sf
 
 TARGET_SR = 16000
 
+
+# =====================================================
+# Load Audio
+# =====================================================
 
 def load_audio(file_path):
     """
     Load audio as mono and resample to 16 kHz.
     """
+
     audio, sr = librosa.load(
         file_path,
         sr=TARGET_SR,
         mono=True
     )
+
     return audio, sr
 
 
-def reduce_noise(audio, sr):
-    """
-    Reduce background noise.
-    """
-    return nr.reduce_noise(
-        y=audio,
-        sr=sr
-    )
-
+# =====================================================
+# Remove Silence
+# =====================================================
 
 def remove_silence(audio, top_db=30):
     """
     Remove leading and trailing silence.
     """
+
     audio, _ = librosa.effects.trim(
         audio,
         top_db=top_db
     )
+
     return audio
 
 
+# =====================================================
+# Normalize Audio
+# =====================================================
+
 def normalize_audio(audio):
     """
-    Normalize audio amplitude.
+    Normalize waveform to [-1, 1].
     """
+
     peak = np.max(np.abs(audio))
 
     if peak == 0:
@@ -51,36 +58,48 @@ def normalize_audio(audio):
     return audio / peak
 
 
-def pre_emphasis(audio, coefficient=0.97):
-    """
-    Apply pre-emphasis filter.
-    """
-    emphasized = np.append(
-        audio[0],
-        audio[1:] - coefficient * audio[:-1]
-    )
+# =====================================================
+# Preprocess Pipeline
+# =====================================================
 
-    return emphasized
-
-
-def preprocess_audio(file_path, apply_noise_reduction=True):
+def preprocess_audio(
+    file_path,
+    save_output=False
+):
     """
     Complete preprocessing pipeline.
+
+    Steps:
+    1. Load audio
+    2. Remove silence
+    3. Normalize
     """
 
     audio, sr = load_audio(file_path)
-
-    if apply_noise_reduction:
-        audio = reduce_noise(audio, sr)
 
     audio = remove_silence(audio)
 
     audio = normalize_audio(audio)
 
-    audio = pre_emphasis(audio)
+    if save_output:
+
+        os.makedirs(
+            "../temp",
+            exist_ok=True
+        )
+
+        sf.write(
+            "../temp/preprocessed.wav",
+            audio,
+            sr
+        )
 
     return audio, sr
 
+
+# =====================================================
+# Test
+# =====================================================
 
 if __name__ == "__main__":
 
@@ -89,21 +108,25 @@ if __name__ == "__main__":
     ).strip()
 
     if not os.path.exists(file_path):
+
         print("Audio file not found.")
         exit()
 
     audio, sr = preprocess_audio(
         file_path,
-        apply_noise_reduction=True
+        save_output=True
     )
 
-    print("\n" + "=" * 50)
+    print("\n" + "=" * 60)
     print("Preprocessing Successful")
-    print("=" * 50)
-    print(f"File         : {file_path}")
-    print(f"Sample Rate  : {sr}")
-    print(f"Duration     : {len(audio) / sr:.2f} seconds")
-    print(f"Samples      : {len(audio)}")
-    print(f"Max Value    : {np.max(audio):.4f}")
-    print(f"Min Value    : {np.min(audio):.4f}")
-    print("=" * 50)
+    print("=" * 60)
+    print(f"File        : {file_path}")
+    print(f"Sample Rate : {sr}")
+    print(f"Duration    : {len(audio)/sr:.2f} sec")
+    print(f"Samples     : {len(audio)}")
+    print(f"Max Value   : {np.max(audio):.4f}")
+    print(f"Min Value   : {np.min(audio):.4f}")
+    print("=" * 60)
+
+    print("\nSaved:")
+    print("../temp/preprocessed.wav")

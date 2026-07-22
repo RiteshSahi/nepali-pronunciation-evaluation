@@ -104,3 +104,23 @@ if __name__ == "__main__":
     print(f"Mean           : {np.mean(features):.4f}")
     print(f"Std            : {np.std(features):.4f}")
     print("=" * 50)
+def get_duration(file_path):
+
+    audio, sr = preprocess_audio(
+        file_path,
+        apply_noise_reduction=("user_recordings" in file_path.lower())
+    )
+
+    return len(audio) / sr
+def get_zcr(audio_path):
+
+    y, sr = librosa.load(
+        audio_path,
+        sr=16000
+    )
+
+    zcr = librosa.feature.zero_crossing_rate(
+        y
+    )[0]
+
+    return np.mean(zcr)
