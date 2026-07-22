@@ -10,6 +10,8 @@ from sklearn.metrics import (
     classification_report,
     confusion_matrix
 )
+from sklearn.model_selection import GridSearchCV
+from sklearn.inspection import permutation_importance
 
 # ======================================================
 # Dataset Paths
@@ -82,7 +84,6 @@ print(test_data["label"].value_counts())
 FEATURES = [
     "dtw",
     "duration",
-    "zcr",
     "wer",
     "cer"
 ]
@@ -97,7 +98,7 @@ y_test = test_data["label"]
 # Build Model
 # ======================================================
 
-model = Pipeline([
+pipeline = Pipeline([
     (
         "scaler",
         StandardScaler()
@@ -105,14 +106,25 @@ model = Pipeline([
     (
         "svm",
         SVC(
-            kernel="rbf",
-            C=1.0,
-            gamma="scale",
             probability=True,
             random_state=42
         )
     )
 ])
+
+param_grid = {
+    "svm__kernel": ["rbf"],
+    "svm__C": [0.1, 1, 10, 50, 100],
+    "svm__gamma": ["scale", 0.1, 0.01, 0.001]
+}
+
+model = GridSearchCV(
+    pipeline,
+    param_grid,
+    cv=5,
+    scoring="accuracy",
+    n_jobs=-1
+)
 
 # ======================================================
 # Train
@@ -124,6 +136,11 @@ model.fit(
     X_train,
     y_train
 )
+print("\nBest Parameters:")
+print(model.best_params_)
+
+print("\nBest CV Accuracy:")
+print(model.best_score_)
 
 # ======================================================
 # Predict
@@ -132,6 +149,33 @@ model.fit(
 prediction = model.predict(X_test)
 
 probability = model.predict_proba(X_test)
+# ======================================================
+# Feature Importance
+# ======================================================
+
+result = permutation_importance(
+    model,
+    X_test,
+    y_test,
+    n_repeats=30,
+    random_state=42
+)
+
+importance = pd.DataFrame({
+    "Feature": FEATURES,
+    "Importance": result.importances_mean
+})
+
+importance = importance.sort_values(
+    by="Importance",
+    ascending=False
+)
+
+print("\n" + "=" * 60)
+print("Feature Importance")
+print("=" * 60)
+
+print(importance)
 
 # ======================================================
 # Evaluation

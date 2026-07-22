@@ -6,15 +6,12 @@ import librosa
 from preprocess import preprocess_audio
 from dtw_distance import calculate_dtw_distance
 
-
 # ======================================================
 # Paths
 # ======================================================
 
 MODEL_PATH = "../models/svm_pronunciation_model.pkl"
-
 REFERENCE_FOLDER = "../dataset/app_reference"
-
 
 # ======================================================
 # Load Model
@@ -23,160 +20,141 @@ REFERENCE_FOLDER = "../dataset/app_reference"
 model = joblib.load(MODEL_PATH)
 
 
-print("=" * 60)
-print("Pronunciation Prediction")
-print("=" * 60)
-
-
 # ======================================================
-# Input Audio
+# Prediction Function
 # ======================================================
 
-audio_file = os.path.expanduser(
-    input("Enter user audio path (.wav): ").strip()
-)
+def predict(audio_file, voice_id):
 
+    # --------------------------------------------------
+    # Reference File
+    # --------------------------------------------------
 
-voice_id = input(
-    "Enter reference voice number: "
-).strip()
+    reference_file = os.path.join(
+        REFERENCE_FOLDER,
+        f"{voice_id}.wav"
+    )
 
+    # --------------------------------------------------
+    # Check Files
+    # --------------------------------------------------
 
-# ======================================================
-# Reference File
-# ======================================================
+    if not os.path.exists(audio_file):
+        raise FileNotFoundError(audio_file)
 
-reference_file = os.path.join(
-    REFERENCE_FOLDER,
-    f"Voice{int(voice_id):02d}.wav"
-)
+    if not os.path.exists(reference_file):
+        raise FileNotFoundError(reference_file)
 
+    # --------------------------------------------------
+    # DTW
+    # --------------------------------------------------
 
-# ======================================================
-# Check Files
-# ======================================================
+    dtw_score = calculate_dtw_distance(
+        reference_file,
+        audio_file
+    )
 
-if not os.path.exists(audio_file):
-    print("\n❌ Audio file not found:")
-    print(audio_file)
-    exit()
+    # --------------------------------------------------
+    # Duration
+    # --------------------------------------------------
 
+    audio, sr = preprocess_audio(
+        audio_file
+    )
 
-if not os.path.exists(reference_file):
-    print("\n❌ Reference file not found:")
-    print(reference_file)
-    exit()
+    duration = len(audio) / sr
 
+  
+    # --------------------------------------------------
+    # ASR Features
+    # --------------------------------------------------
 
-print("\nAudio:")
-print(audio_file)
+    # Replace these later with actual WER/CER
+    wer = 0.0
+    cer = 0.0
 
-print("\nReference:")
-print(reference_file)
+    # --------------------------------------------------
+    # Feature Vector
+    # --------------------------------------------------
 
+    features = pd.DataFrame(
+        [[
+            dtw_score,
+            duration,
+            wer,
+            cer
+        ]],
+        columns=[
+            "dtw",
+            "duration",
+            "wer",
+            "cer"
+        ]
+    )
 
-# ======================================================
-# DTW Feature
-# ======================================================
+    # --------------------------------------------------
+    # Prediction
+    # --------------------------------------------------
 
-dtw_score = calculate_dtw_distance(
-    reference_file,
-    audio_file
-)
+    prediction = model.predict(
+        features
+    )[0]
 
+    probability = model.predict_proba(
+        features
+    )[0]
 
-# ======================================================
-# Duration Feature
-# ======================================================
+    confidence = probability.max() * 100
 
-audio, sr = preprocess_audio(
-    audio_file
-)
+    # --------------------------------------------------
+    # Return
+    # --------------------------------------------------
 
-duration = len(audio) / sr
-
-
-# ======================================================
-# ZCR Feature
-# ======================================================
-
-zcr = librosa.feature.zero_crossing_rate(
-    audio
-).mean()
-
-
-# ======================================================
-# ASR Features
-# ======================================================
-
-# Temporary values
-# Replace with wav2vec2 ASR WER/CER later
-
-wer = 0.0
-cer = 0.0
-
-
-# ======================================================
-# Create Feature Vector
-# ======================================================
-
-features = pd.DataFrame(
-    [[
+    return (
+        prediction,
+        confidence,
         dtw_score,
         duration,
-        zcr,
         wer,
         cer
-    ]],
-    columns=[
-        "dtw",
-        "duration",
-        "zcr",
-        "wer",
-        "cer"
-    ]
-)
-
-
-print("\n" + "=" * 60)
-print("Input Features")
-print("=" * 60)
-
-print(features)
+    )
 
 
 # ======================================================
-# Prediction
+# Terminal Testing
 # ======================================================
 
-prediction = model.predict(
-    features
-)
+if __name__ == "__main__":
 
+    print("=" * 60)
+    print("Pronunciation Prediction")
+    print("=" * 60)
 
-probability = model.predict_proba(
-    features
-)
+    audio_file = os.path.expanduser(
+        input("Enter user audio path (.wav): ").strip()
+    )
 
+    voice_id = input(
+        "Enter reference voice number: "
+    ).strip()
 
-confidence = max(probability[0]) * 100
+    prediction, confidence, dtw, duration, wer, cer = predict(
+        audio_file,
+        voice_id
+    )
 
+    print("\n" + "=" * 60)
+    print("Input Features")
+    print("=" * 60)
 
-# ======================================================
-# Output
-# ======================================================
+    print(f"DTW      : {dtw:.4f}")
+    print(f"Duration : {duration:.4f}")
+    print(f"WER      : {wer:.4f}")
+    print(f"CER      : {cer:.4f}")
 
-print("\n" + "=" * 60)
-print("Result")
-print("=" * 60)
+    print("\n" + "=" * 60)
+    print("Prediction")
+    print("=" * 60)
 
-print(
-    "Pronunciation:",
-    prediction[0]
-)
-
-print(
-    f"Confidence: {confidence:.2f}%"
-)
-
-print("=" * 60)
+    print(f"Pronunciation : {prediction}")
+    print(f"Confidence    : {confidence:.2f}%")

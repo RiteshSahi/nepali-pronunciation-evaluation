@@ -2,6 +2,8 @@ import os
 import streamlit as st
 import pandas as pd
 
+from predict import predict
+
 # -----------------------------------------------------
 # Page Config
 # -----------------------------------------------------
@@ -149,19 +151,10 @@ if st.button(
             "Evaluating pronunciation..."
         ):
 
-            #################################################
-            # Later replace these with actual prediction
-            #################################################
-
-            prediction = "Good"
-            confidence = 94.8
-
-            dtw = 6.41
-            duration = 0.74
-            wer = 0.13
-            cer = 0.04
-
-            #################################################
+            prediction, confidence, dtw, duration, wer, cer = predict(
+                audio_path,
+                voice
+            )
 
         st.success("Evaluation Completed")
 
