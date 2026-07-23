@@ -1,17 +1,26 @@
 import os
 import joblib
 import pandas as pd
-import librosa
 
-from preprocess import preprocess_audio
 from dtw_distance import calculate_dtw_distance
+from asr import transcribe_audio
+from text_compare import compare_text
+from feature_extraction import get_duration
+
 
 # ======================================================
 # Paths
 # ======================================================
 
 MODEL_PATH = "../models/svm_pronunciation_model.pkl"
+
 REFERENCE_FOLDER = "../dataset/app_reference"
+
+SENTENCE_FILE = os.path.join(
+    REFERENCE_FOLDER,
+    "sentences.csv"
+)
+
 
 # ======================================================
 # Load Model
@@ -26,52 +35,106 @@ model = joblib.load(MODEL_PATH)
 
 def predict(audio_file, voice_id):
 
+    # Accept both "64" and "Voice64"
+    voice_id = str(voice_id).replace("Voice", "")
+
     # --------------------------------------------------
-    # Reference File
+    # Reference Audio
     # --------------------------------------------------
 
-    reference_file = os.path.join(
+    reference_audio = os.path.join(
         REFERENCE_FOLDER,
-        f"{voice_id}.wav"
+        f"Voice{voice_id}.wav"
     )
-
-    # --------------------------------------------------
-    # Check Files
-    # --------------------------------------------------
 
     if not os.path.exists(audio_file):
         raise FileNotFoundError(audio_file)
 
-    if not os.path.exists(reference_file):
-        raise FileNotFoundError(reference_file)
+    if not os.path.exists(reference_audio):
+        raise FileNotFoundError(reference_audio)
 
     # --------------------------------------------------
     # DTW
     # --------------------------------------------------
 
     dtw_score = calculate_dtw_distance(
-        reference_file,
+        reference_audio,
         audio_file
     )
 
     # --------------------------------------------------
-    # Duration
+    # Duration Difference
     # --------------------------------------------------
 
-    audio, sr = preprocess_audio(
+    reference_duration = get_duration(
+        reference_audio
+    )
+
+    user_duration = get_duration(
         audio_file
     )
 
-    duration = len(audio) / sr
+    duration_diff = abs(
+        reference_duration -
+        user_duration
+    )
 
-  
     # --------------------------------------------------
-    # ASR Features
+    # ASR
     # --------------------------------------------------
 
-    # Replace these later with actual WER/CER
-    wer = 0.0
-    cer = 0.0
+    recognized_text = transcribe_audio(
+        audio_file
+    )
+
+    # --------------------------------------------------
+    # Reference Sentence
+    # --------------------------------------------------
+
+    sentence_df = pd.read_csv(
+        SENTENCE_FILE
+    )
+
+    row = sentence_df[
+        sentence_df["audio_id"] == f"Voice{voice_id}"
+    ]
+
+    if row.empty:
+        raise ValueError(
+            f"Reference sentence not found for Voice{voice_id}"
+        )
+
+    reference_text = row.iloc[0]["sentence"]
+
+    # --------------------------------------------------
+    # WER / CER
+    # --------------------------------------------------
+
+    wer_score, cer_score = compare_text(
+        reference_text,
+        recognized_text
+    )
+
+    # --------------------------------------------------
+    # Debug
+    # --------------------------------------------------
+
+    print("\n" + "=" * 60)
+    print("ASR RESULT")
+    print("=" * 60)
+
+    print("Reference:")
+    print(reference_text)
+
+    print()
+
+    print("Recognized:")
+    print(recognized_text)
+
+    print()
+
+    print(f"WER : {wer_score:.4f}")
+    print(f"CER : {cer_score:.4f}")
 
     # --------------------------------------------------
     # Feature Vector
@@ -80,9 +143,9 @@ def predict(audio_file, voice_id):
     features = pd.DataFrame(
         [[
             dtw_score,
-            duration,
-            wer,
-            cer
+            duration_diff,
+            wer_score,
+            cer_score
         ]],
         columns=[
             "dtw",
@@ -114,14 +177,14 @@ def predict(audio_file, voice_id):
         prediction,
         confidence,
         dtw_score,
-        duration,
-        wer,
-        cer
+        duration_diff,
+        wer_score,
+        cer_score
     )
 
 
 # ======================================================
-# Terminal Testing
+# Terminal Test
 # ======================================================
 
 if __name__ == "__main__":
@@ -135,7 +198,7 @@ if __name__ == "__main__":
     )
 
     voice_id = input(
-        "Enter reference voice number: "
+        "Enter reference voice id: "
     ).strip()
 
     prediction, confidence, dtw, duration, wer, cer = predict(
@@ -144,17 +207,17 @@ if __name__ == "__main__":
     )
 
     print("\n" + "=" * 60)
-    print("Input Features")
+    print("INPUT FEATURES")
     print("=" * 60)
 
-    print(f"DTW      : {dtw:.4f}")
-    print(f"Duration : {duration:.4f}")
-    print(f"WER      : {wer:.4f}")
-    print(f"CER      : {cer:.4f}")
+    print(f"DTW       : {dtw:.4f}")
+    print(f"Duration  : {duration:.4f}")
+    print(f"WER       : {wer:.4f}")
+    print(f"CER       : {cer:.4f}")
 
     print("\n" + "=" * 60)
-    print("Prediction")
+    print("RESULT")
     print("=" * 60)
 
-    print(f"Pronunciation : {prediction}")
-    print(f"Confidence    : {confidence:.2f}%")
+    print(f"Prediction : {prediction}")
+    print(f"Confidence : {confidence:.2f}%")

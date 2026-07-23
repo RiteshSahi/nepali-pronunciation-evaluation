@@ -4,9 +4,9 @@ import pandas as pd
 
 from predict import predict
 
-# -----------------------------------------------------
+# =====================================================
 # Page Config
-# -----------------------------------------------------
+# =====================================================
 
 st.set_page_config(
     page_title="Nepali Pronunciation Evaluation",
@@ -14,9 +14,9 @@ st.set_page_config(
     layout="centered"
 )
 
-# -----------------------------------------------------
+# =====================================================
 # Paths
-# -----------------------------------------------------
+# =====================================================
 
 REFERENCE_FOLDER = "../dataset/app_reference"
 TEMP_FOLDER = "../temp"
@@ -26,9 +26,9 @@ os.makedirs(
     exist_ok=True
 )
 
-# -----------------------------------------------------
+# =====================================================
 # Load Sentences
-# -----------------------------------------------------
+# =====================================================
 
 df = pd.read_csv(
     os.path.join(
@@ -37,9 +37,9 @@ df = pd.read_csv(
     )
 )
 
-# -----------------------------------------------------
+# =====================================================
 # Title
-# -----------------------------------------------------
+# =====================================================
 
 st.title("🎤 Nepali Pronunciation Evaluation System")
 
@@ -49,9 +49,9 @@ st.write(
 
 st.divider()
 
-# -----------------------------------------------------
+# =====================================================
 # Gender
-# -----------------------------------------------------
+# =====================================================
 
 gender = st.radio(
     "Select Gender",
@@ -64,9 +64,9 @@ gender = st.radio(
 
 st.divider()
 
-# -----------------------------------------------------
+# =====================================================
 # Sentence Selection
-# -----------------------------------------------------
+# =====================================================
 
 voice = st.selectbox(
     "Select Sentence",
@@ -83,9 +83,9 @@ st.subheader("Sentence")
 
 st.info(sentence)
 
-# -----------------------------------------------------
+# =====================================================
 # Reference Audio
-# -----------------------------------------------------
+# =====================================================
 
 reference_audio = os.path.join(
     REFERENCE_FOLDER,
@@ -98,9 +98,9 @@ st.audio(reference_audio)
 
 st.divider()
 
-# -----------------------------------------------------
+# =====================================================
 # User Recording
-# -----------------------------------------------------
+# =====================================================
 
 st.subheader("🎤 Record Your Pronunciation")
 
@@ -130,9 +130,9 @@ if audio is not None:
 
 st.divider()
 
-# -----------------------------------------------------
+# =====================================================
 # Evaluation
-# -----------------------------------------------------
+# =====================================================
 
 if st.button(
     "Evaluate Pronunciation",
@@ -160,10 +160,18 @@ if st.button(
 
         st.divider()
 
+        # ----------------------------------------------
+        # Result
+        # ----------------------------------------------
+
         if prediction == "Good":
 
             st.success(
                 "✅ Good Pronunciation"
+            )
+
+            st.info(
+                "Your pronunciation is close to the native reference."
             )
 
         else:
@@ -172,6 +180,14 @@ if st.button(
                 "❌ Bad Pronunciation"
             )
 
+            st.warning(
+                "Your pronunciation differs from the reference. Listen to the reference audio and try again."
+            )
+
+        # ----------------------------------------------
+        # Confidence
+        # ----------------------------------------------
+
         st.metric(
             "Confidence",
             f"{confidence:.2f}%"
@@ -179,28 +195,36 @@ if st.button(
 
         st.divider()
 
-        col1, col2 = st.columns(2)
+        # ----------------------------------------------
+        # Technical Details
+        # ----------------------------------------------
 
-        with col1:
+        with st.expander(
+            "Show Technical Details"
+        ):
 
-            st.metric(
-                "DTW Distance",
-                f"{dtw:.4f}"
-            )
+            col1, col2 = st.columns(2)
 
-            st.metric(
-                "WER",
-                f"{wer:.4f}"
-            )
+            with col1:
 
-        with col2:
+                st.metric(
+                    "DTW Distance",
+                    f"{dtw:.4f}"
+                )
 
-            st.metric(
-                "Duration Difference",
-                f"{duration:.2f} sec"
-            )
+                st.metric(
+                    "WER",
+                    f"{wer:.4f}"
+                )
 
-            st.metric(
-                "CER",
-                f"{cer:.4f}"
-            )
+            with col2:
+
+                st.metric(
+                    "Duration Difference",
+                    f"{duration:.2f} sec"
+                )
+
+                st.metric(
+                    "CER",
+                    f"{cer:.4f}"
+                )
