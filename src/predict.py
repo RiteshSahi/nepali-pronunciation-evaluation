@@ -1,7 +1,6 @@
 import os
 import joblib
 import pandas as pd
-
 from dtw_distance import calculate_dtw_distance
 from asr import transcribe_audio
 from text_compare import compare_text
@@ -159,15 +158,35 @@ def predict(audio_file, voice_id):
     # Prediction
     # --------------------------------------------------
 
-    prediction = model.predict(
-        features
-    )[0]
+    # Safety rule: if the recognized text is essentially wrong
+    # (empty transcription, or very high word/character error rate),
+    # reject immediately as "Bad" without trusting the SVM.
+    # The SVM was trained mostly on samples with WER/CER inside a
+    # "normal" range, so it can behave unpredictably on extreme,
+    # out-of-range inputs like silence or a completely different
+    # sentence being spoken. This rule acts as a safety net that
+    # catches those cases before they ever reach the model.
 
-    probability = model.predict_proba(
-        features
-    )[0]
+    if recognized_text.strip() == "" or wer_score > 0.8 or cer_score > 0.5:
 
-    confidence = probability.max() * 100
+        prediction = "Bad"
+        confidence = 100.0
+        method = "rule-based (utterance mismatch)"
+
+    else:
+
+        prediction = model.predict(
+            features
+        )[0]
+
+        probability = model.predict_proba(
+            features
+        )[0]
+
+        confidence = probability.max() * 100
+        method = "SVM"
+
+    print(f"Method     : {method}")
 
     # --------------------------------------------------
     # Return

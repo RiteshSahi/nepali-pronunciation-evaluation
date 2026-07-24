@@ -1,7 +1,9 @@
 import os
 import librosa
+import librosa.display
 import numpy as np
 import soundfile as sf
+import matplotlib.pyplot as plt
 
 TARGET_SR = 16000
 
@@ -14,7 +16,6 @@ def load_audio(file_path):
     """
     Load audio as mono and resample to 16 kHz.
     """
-
     audio, sr = librosa.load(
         file_path,
         sr=TARGET_SR,
@@ -32,7 +33,6 @@ def remove_silence(audio, top_db=30):
     """
     Remove leading and trailing silence.
     """
-
     audio, _ = librosa.effects.trim(
         audio,
         top_db=top_db
@@ -49,7 +49,6 @@ def normalize_audio(audio):
     """
     Normalize waveform to [-1, 1].
     """
-
     peak = np.max(np.abs(audio))
 
     if peak == 0:
@@ -62,10 +61,7 @@ def normalize_audio(audio):
 # Preprocess Pipeline
 # =====================================================
 
-def preprocess_audio(
-    file_path,
-    save_output=False
-):
+def preprocess_audio(file_path, save_output=False):
     """
     Complete preprocessing pipeline.
 
@@ -108,10 +104,13 @@ if __name__ == "__main__":
     ).strip()
 
     if not os.path.exists(file_path):
-
         print("Audio file not found.")
         exit()
 
+    # Original audio
+    original_audio, _ = load_audio(file_path)
+
+    # Preprocessed audio
     audio, sr = preprocess_audio(
         file_path,
         save_output=True
@@ -130,3 +129,22 @@ if __name__ == "__main__":
 
     print("\nSaved:")
     print("../temp/preprocessed.wav")
+
+    # =====================================================
+    # Plot Waveforms
+    # =====================================================
+
+    plt.figure(figsize=(12, 6))
+
+    # Original
+    plt.subplot(2, 1, 1)
+    librosa.display.waveshow(original_audio, sr=sr)
+    plt.title("Original Audio")
+
+    # Preprocessed
+    plt.subplot(2, 1, 2)
+    librosa.display.waveshow(audio, sr=sr)
+    plt.title("Preprocessed Audio")
+
+    plt.tight_layout()
+    plt.show()

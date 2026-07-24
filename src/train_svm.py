@@ -19,7 +19,7 @@ from sklearn.inspection import permutation_importance
 
 TRAIN_FILES = []
 
-for user in ["user2", "user3"]:
+for user in ["user2", "user3",]:
 
     file = f"../dataset/{user}_pronunciation_dataset.csv"
 
