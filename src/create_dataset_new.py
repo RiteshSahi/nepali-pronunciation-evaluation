@@ -13,8 +13,33 @@ from asr_mms import transcribe
 
 
 # =====================================================
-# Select User
+# Gender Validation
 # =====================================================
+# Normalizes user/UI-provided gender input ("Male", "female", "MALE", ...)
+# into the lowercase folder name used under dataset/. Mirrors the same
+# validation pattern used in predict.py so both scripts stay consistent.
+
+VALID_GENDERS = ["male", "female"]
+
+
+def normalize_gender(raw_gender):
+
+    cleaned = raw_gender.strip().lower()
+
+    if cleaned not in VALID_GENDERS:
+        print(f"\nInvalid gender '{raw_gender}'. Expected 'Male' or 'Female'.")
+        exit()
+
+    return cleaned
+
+
+# =====================================================
+# Select Gender and User
+# =====================================================
+
+GENDER = normalize_gender(
+    input("Enter gender (Male/Female): ").strip()
+)
 
 USER = input("Enter user folder (user1/user2/user3): ").strip()
 
@@ -23,21 +48,36 @@ USER = input("Enter user folder (user1/user2/user3): ").strip()
 # Paths
 # =====================================================
 
-REFERENCE_FOLDER = "../dataset/app_reference/"
+REFERENCE_FOLDER = f"../dataset/{GENDER}/app_reference/"
 
-GOOD_AUDIO_FOLDER = f"../dataset/user_recordings/{USER}/good_voice/"
-BAD_AUDIO_FOLDER = f"../dataset/user_recordings/{USER}/bad_voice/"
+GOOD_AUDIO_FOLDER = f"../dataset/{GENDER}/{USER}/good_voice/"
+BAD_AUDIO_FOLDER = f"../dataset/{GENDER}/{USER}/bad_voice/"
 
-OUTPUT_FILE = f"../dataset/{USER}_pronunciation_dataset.csv"
+OUTPUT_FILE = f"../dataset/{GENDER}/{USER}_pronunciation_dataset.csv"
+
+
+# =====================================================
+# Validate Reference Folder / Sentences File
+# =====================================================
+# Without these, nothing downstream can run, so we fail fast with a
+# clear message instead of letting pd.read_csv() raise a raw traceback.
+
+if not os.path.exists(REFERENCE_FOLDER):
+    print(f"\nReference folder not found: {REFERENCE_FOLDER}")
+    exit()
+
+SENTENCE_FILE = os.path.join(REFERENCE_FOLDER, "sentences.csv")
+
+if not os.path.exists(SENTENCE_FILE):
+    print(f"\nsentences.csv not found: {SENTENCE_FILE}")
+    exit()
 
 
 # =====================================================
 # Load Reference Sentences
 # =====================================================
 
-reference_df = pd.read_csv(
-    "../dataset/app_reference/sentences.csv"
-)
+reference_df = pd.read_csv(SENTENCE_FILE)
 
 
 # =====================================================

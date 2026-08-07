@@ -18,23 +18,11 @@ st.set_page_config(
 # Paths
 # =====================================================
 
-REFERENCE_FOLDER = "../dataset/app_reference"
 TEMP_FOLDER = "../temp"
 
 os.makedirs(
     TEMP_FOLDER,
     exist_ok=True
-)
-
-# =====================================================
-# Load Sentences
-# =====================================================
-
-df = pd.read_csv(
-    os.path.join(
-        REFERENCE_FOLDER,
-        "sentences.csv"
-    )
 )
 
 # =====================================================
@@ -63,6 +51,23 @@ gender = st.radio(
 )
 
 st.divider()
+
+# =====================================================
+# Reference Folder (Gender-Based)
+# =====================================================
+
+REFERENCE_FOLDER = f"../dataset/{gender.lower()}/app_reference/"
+
+# =====================================================
+# Load Sentences
+# =====================================================
+
+df = pd.read_csv(
+    os.path.join(
+        REFERENCE_FOLDER,
+        "sentences.csv"
+    )
+)
 
 # =====================================================
 # Sentence Selection
@@ -151,10 +156,17 @@ if st.button(
             "Evaluating pronunciation..."
         ):
 
-            prediction, confidence, dtw, duration, wer, cer = predict(
+            prediction, confidence, features = predict(
                 audio_path,
-                voice
+                voice,
+                gender.lower()
             )
+
+            dtw = features["dtw"]
+            duration = features["duration"]
+            wer = features["wer"]
+            cer = features["cer"]
+            zcr = features.get("zcr", 0)
 
         st.success("Evaluation Completed")
 
@@ -228,3 +240,8 @@ if st.button(
                     "CER",
                     f"{cer:.4f}"
                 )
+
+            st.metric(
+                "ZCR",
+                f"{zcr:.4f}"
+            )

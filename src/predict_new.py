@@ -26,31 +26,36 @@ import pandas as pd
 
 from asr import transcribe_audio
 from dtw_distance import calculate_dtw_distance
-from feature_extraction import get_duration
+from feature_extraction import get_duration, get_zcr
 from text_compare import compare_text
-
-# Optional: zero-crossing-rate extractor. Only required if the trained
-# model was built using a "zcr" feature. Imported defensively so this
-# script still works against models trained without it.
-try:
-    from feature_extraction import get_zcr  # type: ignore
-    ZCR_AVAILABLE = True
-except ImportError:
-    ZCR_AVAILABLE = False
-
 
 # --------------------------------------------------------------------------- #
 # Paths / Configuration
 # --------------------------------------------------------------------------- #
 
-MODEL_PATH = "../models/svm_pronunciation_model.pkl"
-REFERENCE_FOLDER = "../dataset/app_reference"
-SENTENCE_FILE = os.path.join(REFERENCE_FOLDER, "sentences.csv")
+# NOTE: These are now resolved per-gender via `get_paths_for_gender()`
+# below, since male and female speakers use different reference datasets
+# and different trained models. The old fixed constants are kept here
+# only as a comment for reference:
+#   MODEL_PATH = "../models/svm_pronunciation_model.pkl"
+#   REFERENCE_FOLDER = "../dataset/app_reference"
+#   SENTENCE_FILE = os.path.join(REFERENCE_FOLDER, "sentences.csv")
+
+GENDER_PATHS = {
+    "male": {
+        "model_path": "../models/male_model.pkl",
+        "reference_folder": "../dataset/male/app_reference",
+    },
+    "female": {
+        "model_path": "../models/female_model.pkl",
+        "reference_folder": "../dataset/female/app_reference",
+    },
+}
 
 # Full feature set this script is capable of producing, in a fixed order.
 # The actual columns sent to the model are trimmed/reordered to match
 # whatever the loaded model expects (see `resolve_feature_columns`).
-ALL_POSSIBLE_FEATURES = ["dtw", "duration", "zcr", "wer", "cer"]
+ALL_POSSIBLE_FEATURES = ["dtw", "duration", "wer", "cer", "zcr"]
 
 # Rule-based safety-net thresholds. If the recognized speech is empty or
 # wildly off from the reference sentence, we skip the SVM entirely and
@@ -157,6 +162,51 @@ def resolve_feature_columns(model) -> list:
 # Helpers
 # --------------------------------------------------------------------------- #
 
+def normalize_gender(raw_gender: str) -> str:
+    """
+    Normalize a user/UI-provided gender value (e.g. Streamlit's
+    st.radio(["Male", "Female"]) selection) into one of the internal
+    keys used by GENDER_PATHS: "male" or "female".
+
+    Args:
+        raw_gender: Raw gender string, any case (e.g. "Male", "female").
+
+    Returns:
+        Either "male" or "female".
+
+    Raises:
+        ValueError: If the value isn't recognized.
+    """
+    cleaned = raw_gender.strip().lower()
+    if cleaned not in GENDER_PATHS:
+        raise ValueError(
+            f"Invalid gender '{raw_gender}'. Expected one of: "
+            f"{', '.join(sorted(GENDER_PATHS))}."
+        )
+    return cleaned
+
+
+def get_paths_for_gender(gender: str) -> Tuple[str, str, str]:
+    """
+    Resolve the model path, reference folder, and sentence CSV path for
+    the given gender.
+
+    Args:
+        gender: Raw gender string (e.g. "Male", "female", "MALE").
+
+    Returns:
+        A tuple of (model_path, reference_folder, sentence_file).
+
+    Raises:
+        ValueError: If the gender is not recognized.
+    """
+    normalized = normalize_gender(gender)
+    paths = GENDER_PATHS[normalized]
+    reference_folder = paths["reference_folder"]
+    sentence_file = os.path.join(reference_folder, "sentences.csv")
+    return paths["model_path"], reference_folder, sentence_file
+
+
 def normalize_voice_id(raw_voice_id: str) -> str:
     """
     Normalize a user-provided voice id into a bare numeric/string id,
@@ -195,12 +245,14 @@ def normalize_voice_id(raw_voice_id: str) -> str:
     return cleaned
 
 
-def load_reference_sentence(voice_id: str) -> str:
+def load_reference_sentence(voice_id: str, sentence_file: str) -> str:
     """
     Look up the reference sentence text for a given voice id.
 
     Args:
         voice_id: The normalized voice id (e.g. "64").
+        sentence_file: Path to the gender-specific sentences.csv, as
+            resolved by `get_paths_for_gender()`.
 
     Returns:
         The reference sentence text.
@@ -209,21 +261,21 @@ def load_reference_sentence(voice_id: str) -> str:
         FileNotFoundError: If the sentence CSV file does not exist.
         ValueError: If no matching row is found for the voice id.
     """
-    if not os.path.exists(SENTENCE_FILE):
+    if not os.path.exists(sentence_file):
         raise FileNotFoundError(
-            f"Reference sentence file not found: {SENTENCE_FILE}"
+            f"Reference sentence file not found: {sentence_file}"
         )
 
     try:
-        sentence_df = pd.read_csv(SENTENCE_FILE)
+        sentence_df = pd.read_csv(sentence_file)
     except Exception as exc:  # noqa: BLE001
         raise RuntimeError(
-            f"Failed to read reference sentence file '{SENTENCE_FILE}': {exc}"
+            f"Failed to read reference sentence file '{sentence_file}': {exc}"
         ) from exc
 
     if "audio_id" not in sentence_df.columns or "sentence" not in sentence_df.columns:
         raise ValueError(
-            f"'{SENTENCE_FILE}' must contain 'audio_id' and 'sentence' "
+            f"'{sentence_file}' must contain 'audio_id' and 'sentence' "
             "columns."
         )
 
@@ -239,14 +291,21 @@ def load_reference_sentence(voice_id: str) -> str:
 # Prediction
 # --------------------------------------------------------------------------- #
 
-def predict(audio_file: str, voice_id: str, model) -> Tuple[str, float, dict]:
+def predict(
+    audio_file: str, voice_id: str, gender: str
+) -> Tuple[str, float, dict]:
     """
     Run the full prediction pipeline for a single user recording.
 
     Args:
         audio_file: Path to the user's recorded .wav file.
         voice_id: Reference voice id (raw user input, will be normalized).
-        model: The loaded trained model (Pipeline or GridSearchCV).
+        gender: Raw gender string from the UI or CLI (e.g. "Male"/
+            "Female"). Used to resolve the gender-appropriate model,
+            reference folder, and sentences.csv for this speaker. The
+            model is loaded internally so both the CLI (`main()`) and
+            the Streamlit app can call this function the exact same
+            way, without either caller having to pre-load a model.
 
     Returns:
         A tuple of (prediction, confidence_percent, feature_values) where
@@ -254,10 +313,18 @@ def predict(audio_file: str, voice_id: str, model) -> Tuple[str, float, dict]:
 
     Raises:
         FileNotFoundError: If the user audio or reference audio is missing.
-        ValueError: If the reference sentence cannot be found.
+        ValueError: If the reference sentence cannot be found, or the
+            gender value is not recognized.
         RuntimeError: If any feature-extraction step fails.
     """
     voice_id = normalize_voice_id(voice_id)
+
+    # ----------------------------------------------------------------- #
+    # Resolve gender-specific model path / reference folder / sentence
+    # file, then load the model.
+    # ----------------------------------------------------------------- #
+    model_path, reference_folder, sentence_file = get_paths_for_gender(gender)
+    model = load_model(model_path)
 
     # ----------------------------------------------------------------- #
     # Resolve audio file paths.
@@ -265,7 +332,7 @@ def predict(audio_file: str, voice_id: str, model) -> Tuple[str, float, dict]:
     if not os.path.exists(audio_file):
         raise FileNotFoundError(f"User audio file not found: {audio_file}")
 
-    reference_audio = os.path.join(REFERENCE_FOLDER, f"Voice{voice_id}.wav")
+    reference_audio = os.path.join(reference_folder, f"Voice{voice_id}.wav")
     if not os.path.exists(reference_audio):
         raise FileNotFoundError(f"Reference audio file not found: {reference_audio}")
 
@@ -287,15 +354,16 @@ def predict(audio_file: str, voice_id: str, model) -> Tuple[str, float, dict]:
     except Exception as exc:  # noqa: BLE001
         raise RuntimeError(f"Duration extraction failed: {exc}") from exc
 
+
     # ----------------------------------------------------------------- #
-    # Zero-crossing rate (optional, only if the model needs it).
+    # ZCR difference.
     # ----------------------------------------------------------------- #
-    zcr_score = None
-    if ZCR_AVAILABLE:
-        try:
-            zcr_score = get_zcr(audio_file)
-        except Exception as exc:  # noqa: BLE001
-            raise RuntimeError(f"ZCR extraction failed: {exc}") from exc
+    try:
+        reference_zcr = get_zcr(reference_audio)
+        user_zcr = get_zcr(audio_file)
+        zcr_diff = abs(reference_zcr - user_zcr)
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(f"ZCR extraction failed: {exc}") from exc
 
     # ----------------------------------------------------------------- #
     # ASR transcription.
@@ -308,7 +376,7 @@ def predict(audio_file: str, voice_id: str, model) -> Tuple[str, float, dict]:
     # ----------------------------------------------------------------- #
     # Reference sentence lookup.
     # ----------------------------------------------------------------- #
-    reference_text = load_reference_sentence(voice_id)
+    reference_text = load_reference_sentence(voice_id, sentence_file)
 
     # ----------------------------------------------------------------- #
     # WER / CER.
@@ -332,8 +400,7 @@ def predict(audio_file: str, voice_id: str, model) -> Tuple[str, float, dict]:
     print()
     print(f"WER : {wer_score:.4f}")
     print(f"CER : {cer_score:.4f}")
-    if zcr_score is not None:
-        print(f"ZCR : {zcr_score:.4f}")
+    print(f"ZCR : {zcr_diff:.4f}")
 
     # ----------------------------------------------------------------- #
     # Assemble all computed feature values into a single lookup dict.
@@ -343,10 +410,8 @@ def predict(audio_file: str, voice_id: str, model) -> Tuple[str, float, dict]:
         "duration": duration_diff,
         "wer": wer_score,
         "cer": cer_score,
+        "zcr": zcr_diff,
     }
-    if zcr_score is not None:
-        computed_values["zcr"] = zcr_score
-
     # ----------------------------------------------------------------- #
     # Rule-based safety net for clearly failed utterances.
     # ----------------------------------------------------------------- #
@@ -371,7 +436,6 @@ def predict(audio_file: str, voice_id: str, model) -> Tuple[str, float, dict]:
                 f"Cannot build feature vector: missing computed value(s) "
                 f"for {missing}. The loaded model expects features "
                 f"{feature_columns}, but this script could not compute "
-                f"all of them (e.g. ZCR extractor unavailable)."
             )
 
         features_df = pd.DataFrame(
@@ -406,7 +470,7 @@ def main() -> None:
     print("Pronunciation Prediction")
     print("=" * 60)
 
-    model = load_model(MODEL_PATH)
+    gender_input = input("Enter gender (Male/Female): ").strip()
 
     audio_file = os.path.expanduser(
         input("Enter user audio path (.wav): ").strip()
@@ -415,7 +479,7 @@ def main() -> None:
 
     try:
         prediction, confidence, feature_values = predict(
-            audio_file, voice_id_input, model
+            audio_file, voice_id_input, gender_input
         )
     except (FileNotFoundError, ValueError, RuntimeError) as exc:
         print("\n" + "=" * 60)

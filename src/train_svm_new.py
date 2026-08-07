@@ -7,15 +7,17 @@ train_svm.py
 AI-based Nepali Pronunciation Evaluation - SVM Training Script.
 
 This script:
-    1. Loads pronunciation datasets for three users.
-    2. Combines user2 + user3 datasets for training.
-    3. Uses user1 dataset for testing.
-    4. Builds a Scikit-learn Pipeline (StandardScaler + SVC).
-    5. Performs hyperparameter tuning with GridSearchCV.
-    6. Evaluates the best model on the test set.
-    7. Computes permutation feature importance.
-    8. Prints per-sample predictions with confidence.
-    9. Saves the trained model pipeline using joblib.
+    1. Asks the user for gender (Male/Female) and resolves the
+       gender-specific dataset directory and output model path.
+    2. Loads pronunciation datasets for three users.
+    3. Combines user2 + user3 datasets for training.
+    4. Uses user1 dataset for testing.
+    5. Builds a Scikit-learn Pipeline (StandardScaler + SVC).
+    6. Performs hyperparameter tuning with GridSearchCV.
+    7. Evaluates the best model on the test set.
+    8. Computes permutation feature importance.
+    9. Prints per-sample predictions with confidence.
+    10. Saves the trained model pipeline using joblib.
 
 Author: AI Assistant
 Python Version: 3.9+
@@ -48,15 +50,22 @@ import joblib
 # Constants / Configuration
 # --------------------------------------------------------------------------- #
 
-DATASET_DIR = "../dataset"
+DATASET_ROOT = "../dataset"
 MODEL_DIR = "../models"
-MODEL_PATH = os.path.join(MODEL_DIR, "svm_pronunciation_model.pkl")
 
-TRAIN_FILES = [
-    os.path.join(DATASET_DIR, "user2_pronunciation_dataset.csv"),
-    os.path.join(DATASET_DIR, "user3_pronunciation_dataset.csv"),
-]
-TEST_FILE = os.path.join(DATASET_DIR, "user1_pronunciation_dataset.csv")
+VALID_GENDERS = ("male", "female")
+
+# NOTE: These four are resolved at runtime, once the user's gender
+# selection is known (see `resolve_gender_paths()` and step 1 of
+# `main()`), since male and female speakers now use separate dataset
+# folders and separate trained models. They are declared here as
+# module-level placeholders so every function that references them
+# (e.g. `validate_files_exist()`'s error message) keeps working
+# unchanged after `main()` assigns them via the `global` statement.
+DATASET_DIR = None
+MODEL_PATH = None
+TRAIN_FILES = None
+TEST_FILE = None
 
 FEATURES = [
     "dtw",
@@ -106,6 +115,58 @@ def print_subsection(title: str) -> None:
     print("\n" + "-" * 50)
     print(title)
     print("-" * 50)
+
+
+# --------------------------------------------------------------------------- #
+# Gender Validation
+# --------------------------------------------------------------------------- #
+
+def normalize_gender(raw_gender: str) -> str:
+    """
+    Normalize a user-provided gender value into one of the internal
+    keys used for path resolution: "male" or "female".
+
+    Args:
+        raw_gender: Raw gender string, any case (e.g. "Male", "female").
+
+    Returns:
+        Either "male" or "female".
+
+    Raises:
+        SystemExit: If the value isn't recognized.
+    """
+    cleaned = raw_gender.strip().lower()
+
+    if cleaned not in VALID_GENDERS:
+        print_section("ERROR: INVALID GENDER")
+        print(f"Invalid gender '{raw_gender}'. Expected 'Male' or 'Female'.")
+        sys.exit(1)
+
+    return cleaned
+
+
+def resolve_gender_paths(gender: str) -> Tuple[str, str, List[str], str]:
+    """
+    Resolve the dataset directory, model output path, training file
+    list, and testing file path for the given (already normalized)
+    gender.
+
+    Args:
+        gender: Normalized gender string, "male" or "female".
+
+    Returns:
+        A tuple of (dataset_dir, model_path, train_files, test_file).
+    """
+    dataset_dir = os.path.join(DATASET_ROOT, gender)
+    model_path = os.path.join(MODEL_DIR, f"{gender}_model.pkl")
+
+    train_files = [
+        os.path.join(dataset_dir, "user2_pronunciation_dataset.csv"),
+        os.path.join(dataset_dir, "user3_pronunciation_dataset.csv"),
+    ]
+    test_file = os.path.join(dataset_dir, "user1_pronunciation_dataset.csv")
+
+    return dataset_dir, model_path, train_files, test_file
 
 
 # --------------------------------------------------------------------------- #
@@ -434,13 +495,28 @@ def main() -> None:
     print_section("NEPALI PRONUNCIATION EVALUATION - SVM TRAINING")
 
     # ----------------------------------------------------------------- #
-    # 1. Validate that all required dataset files exist.
+    # 1. Ask for gender and resolve the gender-specific dataset/model
+    #    paths (male and female speakers use separate datasets and
+    #    separate trained models).
+    # ----------------------------------------------------------------- #
+    global DATASET_DIR, MODEL_PATH, TRAIN_FILES, TEST_FILE
+
+    gender_input = input("Enter gender (Male/Female): ").strip()
+    gender = normalize_gender(gender_input)
+
+    DATASET_DIR, MODEL_PATH, TRAIN_FILES, TEST_FILE = resolve_gender_paths(gender)
+
+    print_subsection("Selected Gender")
+    print(gender.capitalize())
+
+    # ----------------------------------------------------------------- #
+    # 2. Validate that all required dataset files exist.
     # ----------------------------------------------------------------- #
     all_files = TRAIN_FILES + [TEST_FILE]
     validate_files_exist(all_files)
 
     # ----------------------------------------------------------------- #
-    # 2. Load training and testing datasets.
+    # 3. Load training and testing datasets.
     # ----------------------------------------------------------------- #
     print_subsection("Training Files")
     for path in TRAIN_FILES:
@@ -461,13 +537,13 @@ def main() -> None:
     print(test_df[TARGET].value_counts().to_string())
 
     # ----------------------------------------------------------------- #
-    # 3. Prepare feature matrices and target vectors.
+    # 4. Prepare feature matrices and target vectors.
     # ----------------------------------------------------------------- #
     x_train, y_train = split_features_target(train_df)
     x_test, y_test = split_features_target(test_df)
 
     # ----------------------------------------------------------------- #
-    # 4. Train the SVM model using GridSearchCV.
+    # 5. Train the SVM model using GridSearchCV.
     # ----------------------------------------------------------------- #
     print_section("TRAINING MODEL (GridSearchCV)")
     print("Building pipeline: StandardScaler -> SVC(probability=True)")
@@ -485,22 +561,22 @@ def main() -> None:
     print(f"{grid_search_model.best_score_ * 100:.2f}%")
 
     # ----------------------------------------------------------------- #
-    # 5. Evaluate the trained model on the test set.
+    # 6. Evaluate the trained model on the test set.
     # ----------------------------------------------------------------- #
     y_pred = evaluate_model(grid_search_model, x_test, y_test)
 
     # ----------------------------------------------------------------- #
-    # 6. Compute and display permutation feature importance.
+    # 7. Compute and display permutation feature importance.
     # ----------------------------------------------------------------- #
     compute_feature_importance(grid_search_model, x_test, y_test)
 
     # ----------------------------------------------------------------- #
-    # 7. Print per-sample predictions with confidence.
+    # 8. Print per-sample predictions with confidence.
     # ----------------------------------------------------------------- #
     print_predictions(grid_search_model, test_df, x_test, y_test, y_pred)
 
     # ----------------------------------------------------------------- #
-    # 8. Save the trained model to disk.
+    # 9. Save the trained model to disk.
     # ----------------------------------------------------------------- #
     save_model(grid_search_model, MODEL_PATH)
 

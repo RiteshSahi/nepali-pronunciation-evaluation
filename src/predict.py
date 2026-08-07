@@ -13,7 +13,7 @@ from feature_extraction import get_duration
 
 MODEL_PATH = "../models/svm_pronunciation_model.pkl"
 
-REFERENCE_FOLDER = "../dataset/app_reference"
+REFERENCE_FOLDER = "../dataset/app_reference/"
 
 SENTENCE_FILE = os.path.join(
     REFERENCE_FOLDER,
@@ -42,9 +42,11 @@ def predict(audio_file, voice_id):
     # --------------------------------------------------
 
     reference_audio = os.path.join(
-        REFERENCE_FOLDER,
-        f"Voice{voice_id}.wav"
-    )
+    "../dataset",
+    gender,
+    "app_reference",
+    f"Voice{voice_id}.wav"
+)
 
     if not os.path.exists(audio_file):
         raise FileNotFoundError(audio_file)
